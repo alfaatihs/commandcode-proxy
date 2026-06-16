@@ -339,14 +339,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_sse(self, data: bytes):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            # Client disconnected — ignore
+            pass
 
     def do_GET(self):
         if self.path == "/v1/models":
@@ -391,10 +395,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
         status, cc_response = call_commandcode_api(cc_body)
 
         if status != 200:
-            self._send_json(502, {
-                "error": f"CommandCode API returned {status}",
-                "detail": cc_response.decode("utf-8", errors="replace")[:500],
-            })
+            if is_native:
+                # Return error as SSE so 9router's handler can process it
+                error_sse = json.dumps({"type": "error", "message": f"CommandCode API returned {status}"}).encode()
+                self._send_sse(error_sse)
+            else:
+                self._send_json(502, {
+                    "error": f"CommandCode API returned {status}",
+                    "detail": cc_response.decode("utf-8", errors="replace")[:500],
+                })
             return
 
         if is_native:
