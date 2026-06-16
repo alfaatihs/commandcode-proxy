@@ -1,0 +1,15 @@
+[Unit]
+Description=CommandCode Proxy (OpenAI ↔ CommandCode API translator)
+After=network-online.target 9router.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=python3 /home/homelab/.hermes/scripts/commandcode-proxy.py
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/home/homelab
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
